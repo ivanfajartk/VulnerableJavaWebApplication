@@ -9,6 +9,20 @@ pipeline {
 				sh 'mvn compile'
 			}	
 		}
+		stage ('SCA') {
+			agent {
+				docker {
+					image 'owasp/dependency-check:latest'
+					args '-v /var/run/docker.sock:/var/run/docker.sock --entrypoint '
+				}
+			}
+			steps {
+				sh '/usr/share/dependency-check/bin/dependency-check.sh . --project "VulnerableJavaWebApplication" --format ALL'
+				archiveArtifacts artifacts: 'dependency-check-report.html'
+				archiveArtifacts artifacts: 'dependency-check-report.json'
+				archiveArtifacts artifacts: 'dependency-check-report.xml'
+			}
+		}
 		stage ('Build Docker Image') {
 		    agent {
 		        docker {
