@@ -17,7 +17,7 @@ pipeline {
 				}
 			}
 			steps {
-				sh '/usr/share/dependency-check/bin/dependency-check.sh . --project "VulnerableJavaWebApplication" --format ALL'
+				sh '/usr/share/dependency-check/bin/dependency-check.sh --scan . --project "VulnerableJavaWebApplication" --format ALL'
 				archiveArtifacts artifacts: 'dependency-check-report.html'
 				archiveArtifacts artifacts: 'dependency-check-report.json'
 				archiveArtifacts artifacts: 'dependency-check-report.xml'
