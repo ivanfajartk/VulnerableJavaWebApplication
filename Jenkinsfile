@@ -6,10 +6,10 @@ pipeline {
             agent { label 'maven' }
             steps {
                 // Menambahkan parameter agar output berupa HTML
-                sh 'mvn clean compile spotbugs:spotbugs -Dspotbugs.htmlOutput=true'
+                sh 'mvn clean compile spotbugs:spotbugs -Dspotbugs.xmlOutput=true -Dspotbugs.htmlOutput=true'
                 
                 // Mengarsipkan semua hasil spotbugs (xml dan html)
-                archiveArtifacts artifacts: 'target/spotbugs*', allowEmptyArchive: true
+                archiveArtifacts artifacts: 'target/spotbugsXml.xml, target/spotbugs.html', allowEmptyArchive: false
             }
         }
 
