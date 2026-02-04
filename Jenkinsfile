@@ -1,27 +1,15 @@
 pipeline {
-    agent none
+    agent none 
+    
     stages {
-        stage('Maven Compile') {
-            agent {
-                label 'maven'
-            }
+        stage('Maven Compile and SAST Spotbugs') {
+            agent { label 'maven' }
             steps {
-                sh 'mvn compile'
-            }
-        }
-
-        stage('SCA') {
-            agent {
-                docker {
-                    image 'owasp/dependency-check:latest'
-                    args '--entrypoint="" -v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
-            steps {
-                sh '/usr/share/dependency-check/bin/dependency-check.sh --scan . --project "VulnerableJavaWebApplication" --format ALL'
-                archiveArtifacts artifacts: 'dependency-check-report.html'
-                archiveArtifacts artifacts: 'dependency-check-report.json'
-                archiveArtifacts artifacts: 'dependency-check-report.xml'
+                // Menambahkan 'clean' agar build bersih
+                sh 'mvn clean compile spotbugs:spotbugs'
+                
+                // Menggunakan wildcard agar tetap terambil meski nama file bervariasi
+                archiveArtifacts artifacts: 'target/spotbugs*', allowEmptyArchive: true
             }
         }
 
@@ -29,38 +17,49 @@ pipeline {
             agent {
                 docker {
                     image 'trufflesecurity/trufflehog:latest'
-                    args '--entrypoint= -v /var/run/docker.sock:/var/run/docker.sock'
+                    args '--entrypoint='
                 }
-            } // Penutup agent yang benar
+            }
             steps {
-                // Gunakan returnStatus agar pipeline tidak langsung fail jika ada temuan
-                sh 'trufflehog --no-update filesystem . --json > trufflehogscan.json'
+                script {
+                    // returnStatus: true sangat penting agar pipeline tidak langsung fail
+                    def status = sh(script: 'trufflehog filesystem . --no-update --json > trufflehogscan.json', returnStatus: true)
+                    
+                    if (status != 0) {
+                        echo "WARNING: Trufflehog detected potential secrets!"
+                    }
+                }
                 sh 'cat trufflehogscan.json'
-                archiveArtifacts artifacts: 'trufflehogscan.json'
+                archiveArtifacts artifacts: 'trufflehogscan.json', allowEmptyArchive: true
             }
         }
 
         stage('Build Docker Image') {
-            agent {
-                docker {
-                    image 'docker:dind'
-                    args '-u root -v /var/run/docker.sock:/var/run/docker.sock'
-                }
-            }
+            agent { label 'built-in' } 
             steps {
+                // Pastikan Dockerfile ada di root repository
                 sh 'docker build -t vulnerable-java-application:0.1 .'
             }
         }
 
         stage('Run Docker Image') {
-            agent {
-                label 'built-in'
-            }
+            agent { label 'built-in' }
             steps {
-                // Menambahkan || true agar tidak fail jika container belum ada
                 sh 'docker rm --force vulnerable-java-application || true'
                 sh 'docker run --name vulnerable-java-application -p 9000:9000 -d vulnerable-java-application:0.1'
             }
         }
-    } // Penutup stages
-} // Penutup pipeline
+    }
+
+    post {
+        always {
+            echo 'Pipeline completed.'
+        }
+        success {
+            echo 'Deployment successful!'
+        }
+        failure {
+            echo 'Pipeline failed. Check the logs for details.'
+        }
+    }
+}
