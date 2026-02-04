@@ -52,7 +52,7 @@ pipeline {
                     catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
                         // Gunakan http (bukan https) jika aplikasi tidak pakai SSL
                         // Gunakan 172.17.0.1 (IP default Docker Bridge) jika IP container berubah-ubah
-                        sh 'zap-full-scan.py -t http://172.18.0.3:9000 -r zap-full-scan.html -x zap-full-scan.xml'
+                        sh 'zap-full-scan.py -t https://172.18.0.3:9000 -r zap-full-scan.html -x zap-full-scan.xml'
                     }
                 }
             }
