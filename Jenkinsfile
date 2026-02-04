@@ -34,6 +34,7 @@ pipeline {
 						sh 'cat trufflehogscan.json'
 						archiveArtifacts artifacts 'trufflehogscan.json'
 					}
+					}
 				}
                 stage ('Build Docker Image') {
                     agent {
@@ -54,6 +55,6 @@ pipeline {
                                 sh 'docker rm --force vulnerable-java-application'
                                 sh 'docker run --name vulnerable-java-application -p 9000:9000 -d vulnerable-java-application:0.1'
                         }
-                }
-        }
-}
+				}
+			}
+	}
