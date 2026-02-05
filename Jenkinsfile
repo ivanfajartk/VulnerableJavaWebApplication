@@ -15,12 +15,11 @@ pipeline {
                 docker {
                     image 'trufflesecurity/trufflehog:latest'
                     args '--entrypoint='
-                    // Menambahkan retry jika download image gagal
                     reuseNode true
                 }
             }
             steps {
-                retry(2) { // Mencoba ulang jika terjadi error network/download
+                retry(2) {
                     script {
                         def status = sh(script: 'trufflehog filesystem . --no-update --json > trufflehogscan.json', returnStatus: true)
                         if (status != 0) echo "WARNING: Secrets found!"
@@ -38,21 +37,19 @@ pipeline {
                 sh 'docker run --name vulnerable-java-application -p 9000:9000 -d vulnerable-java-application:0.1'
             }
         }
-        
+
         stage('DAST') {
             agent {
                 docker {
                     image 'ghcr.io/zaproxy/zaproxy:stable'
-                    // Gunakan WORKSPACE agar mounting konsisten
                     args '-u root --entrypoint= -v ${WORKSPACE}:/zap/wrk/:rw'
                 }
             }
             steps {
                 retry(2) {
                     catchError(buildResult: 'SUCCESS', stageResult: 'FAILURE') {
-                        // Gunakan http (bukan https) jika aplikasi tidak pakai SSL
-                        // Gunakan 172.17.0.1 (IP default Docker Bridge) jika IP container berubah-ubah
-                        sh 'zap-full-scan.py -t https://172.18.0.3:9000 -r zap-full-scan.html -x zap-full-scan.xml'
+                        // Perbaikan: Gunakan http jika aplikasi tidak menggunakan SSL
+                        sh 'zap-full-scan.py -t http://172.18.0.3:9000 -r zap-full-scan.html -x zap-full-scan.xml'
                     }
                 }
             }
@@ -66,11 +63,28 @@ pipeline {
 
     post {
         always {
+            // Memindahkan blok node ke dalam script agar tidak error sintaks
+            node('built-in') {
+                script {
+                    echo 'Importing results to DefectDojo...'
+                    
+                    // Trufflehog Import
+                    sh 'curl -X POST http://localhost:8081/api/v2/import-scan/ -H "Authorization: Token 76c969c472ea330260dd0920eed9fb29068bf044" -F "scan_type=Trufflehog Scan" -F "file=@trufflehogscan.json" -F "engagement=2"'
+                    
+                    // SpotBugs Import - Perbaikan Path: File ada di folder target/
+                    sh 'curl -X POST http://localhost:8081/api/v2/import-scan/ -H "Authorization: Token 76c969c472ea330260dd0920eed9fb29068bf044" -F "scan_type=SpotBugs Scan" -F "file=@target/spotbugsXml.xml" -F "engagement=2"'
+                    
+                    // ZAP Import
+                    sh 'curl -X POST http://localhost:8081/api/v2/import-scan/ -H "Authorization: Token 76c969c472ea330260dd0920eed9fb29068bf044" -F "scan_type=ZAP Scan" -F "file=@zap-full-scan.xml" -F "engagement=2"'
+                }
+            }
             echo 'Pipeline completed.'
         }
         cleanup {
-            // Membersihkan image yang tidak terpakai agar disk tidak penuh
-            sh 'docker image prune -f || true'
+            // Menjalankan cleanup di agent yang memiliki docker
+            node('built-in') {
+                sh 'docker image prune -f || true'
+            }
         }
     }
 }
